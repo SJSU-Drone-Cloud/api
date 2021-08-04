@@ -159,7 +159,8 @@ func (s *Services) registerPostHandler(w http.ResponseWriter, r *http.Request) {
 	jsn, err := json.Marshal(trackingDevice)
 
 	//send second post request to tracking component
-	trackingResp, err := http.Post(trackingCreateURL, "application/json", bytes.NewBuffer(jsn)
+	trackingResp, err := http.Post(trackingCreateURL, "application/json", bytes.NewBuffer(jsn))
+	fmt.Println(trackingResp)
 	if err != nil {
 		fmt.Println("tracking resp issue")
 		fmt.Println(err)
