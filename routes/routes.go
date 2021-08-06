@@ -17,6 +17,7 @@ import (
 type Services struct {
 	TrackingIP string
 	RegistryIP string
+	MissionIP  string
 }
 
 func setupCors(w *http.ResponseWriter, req *http.Request) {
@@ -34,13 +35,140 @@ func NewRouter() *mux.Router {
 	}
 	trackingip := os.Getenv("TRACKINGIP")
 	registryip := os.Getenv("REGISTRYIP")
+	missionip := os.Getenv(("MISSIONIP"))
 
-	s := &Services{TrackingIP: trackingip, RegistryIP: registryip}
-	fmt.Println("trackingip:", s.TrackingIP, "registryip:", s.RegistryIP)
+	s := &Services{TrackingIP: trackingip, RegistryIP: registryip, MissionIP: missionip}
 	r.HandleFunc("/tracking", s.trackingPostHandler).Methods("POST")
 	r.HandleFunc("/tracking/{id}", s.trackingGetHandler).Methods("GET")
 	r.HandleFunc("/register", s.registerPostHandler).Methods("POST")
+	r.HandleFunc("/mission/create", s.createMissionHandler).Methods("POST")
+	r.HandleFunc("/mission/update/{missionID}", s.updateMissionHandler).Methods("PUT")
+	r.HandleFunc("/mission/drone/{droneID}", s.getDroneMissionsHandler).Methods("GET")
+	r.HandleFunc("/mission/{missionID}", s.getMissionHandler).Methods("GET")
 	return r
+}
+
+func (s *Services) createMissionHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("create mission handler called")
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		fmt.Println("err tph bodyread:", err)
+		return
+	}
+	//repackage request body into a new request
+	url := "http://" + s.MissionIP + r.URL.Path
+	if err != nil {
+		fmt.Println("json marshaling error")
+		fmt.Println(err)
+		return
+	}
+	//send second post request to tracking component
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		fmt.Println("post request issue")
+		fmt.Println(err)
+		return
+	}
+	//read out response body from second post
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	//unmarshalling request body into structs
+
+	fmt.Println("exiting create post handler")
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(200)
+	w.Write([]byte(body))
+}
+
+func (s *Services) getDroneMissionsHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("get drone mission handler called")
+	url := "http://" + s.MissionIP + r.URL.Path
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("error getting from tracking component")
+		fmt.Println("error:", err)
+		return
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write([]byte(body))
+}
+
+func (s *Services) getMissionHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("get mission handler called")
+	url := "http://" + s.MissionIP + r.URL.Path
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("error getting from tracking component")
+		fmt.Println("error:", err)
+		return
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	fmt.Println(body)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write([]byte(body))
+}
+
+func (s *Services) updateMissionHandler(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		fmt.Println("err tph bodyread:", err)
+		return
+	}
+	//repackage request body into a new request
+	url := "http://" + s.MissionIP + r.URL.Path
+	fmt.Println("url:", url)
+	if err != nil {
+		fmt.Println("json marshaling error")
+		fmt.Println(err)
+		return
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		fmt.Println("error setting up put request")
+		return
+	}
+
+	resp, err := client.Do(req)
+	//send second post request to tracking component
+	if err != nil {
+		fmt.Println("put request issue")
+		fmt.Println(err)
+		return
+	}
+	//read out response body from second post
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	//unmarshalling request body into structs
+
+	fmt.Println("exiting update mission post handler")
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(200)
+	w.Write([]byte(body))
 }
 
 //theoretically, this should be able to access a cache of memory somewhere
@@ -159,8 +287,7 @@ func (s *Services) registerPostHandler(w http.ResponseWriter, r *http.Request) {
 	jsn, err := json.Marshal(trackingDevice)
 
 	//send second post request to tracking component
-	trackingResp, err := http.Post(trackingCreateURL, "application/json", bytes.NewBuffer(jsn))
-	fmt.Println(trackingResp)
+	_, err = http.Post(trackingCreateURL, "application/json", bytes.NewBuffer(jsn))
 	if err != nil {
 		fmt.Println("tracking resp issue")
 		fmt.Println(err)
